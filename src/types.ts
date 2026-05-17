@@ -109,6 +109,15 @@ export interface HoneycombDataSourceOptions extends DataSourceJsonData {
    * Use https://api.eu1.honeycomb.io for EU accounts.
    */
   apiUrl?: string;
+
+  /** L1 cache TTL in minutes (query shape → query_id). Default: 30. */
+  cacheTtlL1Minutes?: number;
+
+  /** L2 cache TTL in minutes (execution key → query_result_id). Default: 10. */
+  cacheTtlL2Minutes?: number;
+
+  /** L3 cache TTL in minutes (completed query results). Default: 120. */
+  cacheTtlL3Minutes?: number;
 }
 
 /**

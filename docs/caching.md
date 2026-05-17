@@ -2,9 +2,9 @@
 
 ## The problem
 
-Honeycomb limits the **Create Query Result** endpoint to **10 requests per minute** per API key. This is a hard limit with no exceptions.
+Honeycomb limits the **Create Query Result** endpoint to **10 requests per minute** per Honeycomb team by default.
 
-A typical Grafana dashboard with 15 panels, each using a different query, auto-refreshing every 30 seconds would generate 15 requests per refresh — exceeding the limit on every cycle.
+A typical Grafana dashboard with 15 panels, each using a different query, auto-refreshing every 30 seconds would generate 15 requests per refresh — possibly exceeding and causing rate limiting.
 
 ## The solution: three-level cache
 
@@ -17,7 +17,7 @@ Request → singleflight → L3? → L2? → L1? → Honeycomb API
                                         (8 tokens/60 s)
 ```
 
-### L1: Query ID cache (TTL: 1 hour)
+### L1: Query ID cache (default TTL: 30 minutes)
 
 **Key:** `SHA256(datasource_uid + dataset + normalized_query_shape)`  
 **Value:** Honeycomb `query_id`
@@ -28,7 +28,7 @@ The Honeycomb Query API (POST /1/queries) creates an immutable query specificati
 
 **Cache miss:** One call to POST /1/queries. This endpoint is NOT subject to the 10/min limit.
 
-### L2: Query Result ID cache (TTL: 30 minutes)
+### L2: Query Result ID cache (default TTL: 10 minutes)
 
 **Key:** `SHA256(datasource_uid + dataset + normalized_query + snapped_from + snapped_to + disable_series + limit)`  
 **Value:** Honeycomb `query_result_id`
@@ -44,14 +44,16 @@ This means a panel refreshing every 30 seconds reuses the same L2 entry for the 
 
 **Cache miss:** One call to POST /1/query_results. This IS the rate-limited endpoint. A token must be acquired from the token bucket before this call.
 
-### L3: Completed result cache (TTL: 24 hours)
+### L3: Completed result cache (default TTL: 2 hours)
 
 **Key:** `"result:" + execKey` (same as L2 key prefix)  
 **Value:** Full `QueryResultResponse` from Honeycomb
 
-Completed query results are immutable. Honeycomb returns `Cache-Control: private, max-age=86400` on completed results. The plugin honours this by caching for 24 hours.
+Completed query results are immutable. Honeycomb returns `Cache-Control: private, max-age=86400` on completed results, allowing caching up to 24 hours. The default TTL of 2 hours balances freshness with API efficiency.
 
 **Cache hit:** No Honeycomb API calls at all. Results are served from memory in microseconds.
+
+All three TTLs are configurable in the data source settings under **Cache Settings**. You can also set them via provisioning (`cacheTtlL1Minutes`, `cacheTtlL2Minutes`, `cacheTtlL3Minutes` in `jsonData`).
 
 ### Singleflight deduplication (L0)
 
@@ -74,7 +76,7 @@ Panel A: execKey = abc123
   → wait for token bucket...
   → POST /1/query_results → result_id = rid-1 (cached in L2)
   → poll GET /1/query_results/rid-1 until complete
-  → cache result in L3 (24h TTL)
+  → cache result in L3 (2h TTL by default)
   → return frames
 
 Panel B: same query as A (same execKey = abc123)
@@ -99,7 +101,7 @@ User moves time range forward by 10 minutes (still within 60s snap bucket):
 
 User moves time range to a new day (different snap bucket):
   → L3 miss
-  → L1 hit (query_id still cached for 1h)
+  → L1 hit (query_id still cached for 30min)
   → L2 miss (new time window)
   → Token bucket → POST /1/query_results → ...
   → 1 rate-limited call, then polling
@@ -157,7 +159,7 @@ To force a cache refresh for a specific panel without restarting:
 3. Run the query — this produces a new execKey, bypassing L2/L3
 4. Undo the temporary change
 
-For production use, the 24-hour L3 TTL means that a query result won't change during the day regardless of what Honeycomb receives after the initial load. This is intentional for stable dashboards. If you need fresher results, reduce the TTL (currently a compile-time constant in `pkg/cache/cache.go`).
+For production use, the default 2-hour L3 TTL means query results won't refresh during that window regardless of new data arriving in Honeycomb. If you need fresher results, lower the L3 TTL in the data source settings. You can increase it up to 1440 minutes (24 hours) to match Honeycomb's maximum cache window.
 
 ---
 
