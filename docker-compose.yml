@@ -1,0 +1,38 @@
+version: '3.8'
+
+# Local development environment for testing the Honeycomb Grafana plugin.
+#
+# Usage:
+#   1. Build the plugin:   mage build:linux && npm run build
+#   2. Start Grafana:      docker-compose up
+#   3. Open Grafana:       http://localhost:3000 (admin/admin)
+#   4. Add the Honeycomb datasource and configure your API key.
+#
+# The plugin directory is mounted directly so changes to dist/ are picked up
+# on Grafana restart (ctrl-c then docker-compose up).
+
+services:
+  grafana:
+    image: grafana/grafana:latest
+    container_name: honeycomb-grafana-dev
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=false
+      # Allow unsigned plugins in development.
+      - GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=honeycombio-honeycomb-datasource
+      - GF_LOG_LEVEL=debug
+      - GF_PATHS_PLUGINS=/var/lib/grafana/plugins
+    volumes:
+      # Mount the built plugin.
+      - ./:/var/lib/grafana/plugins/honeycombio-honeycomb-datasource
+      # Mount provisioning config for auto-configured datasource.
+      - ./provisioning:/etc/grafana/provisioning
+      # Persist Grafana state.
+      - grafana-storage:/var/lib/grafana
+    restart: unless-stopped
+
+volumes:
+  grafana-storage:

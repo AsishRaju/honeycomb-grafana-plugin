@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Go backend
+  # ---------------------------------------------------------------------------
+  go:
+    name: Go build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Verify dependencies
+        run: go mod verify
+
+      - name: Build backend
+        run: mage build:linux
+
+      - name: Run Go tests
+        run: go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.out
+          flags: go
+        continue-on-error: true
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+
+  # ---------------------------------------------------------------------------
+  # TypeScript frontend
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: Frontend build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Run frontend tests
+        run: npm test -- --passWithNoTests --ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+  # ---------------------------------------------------------------------------
+  # Plugin validation
+  # ---------------------------------------------------------------------------
+  validate:
+    name: Validate plugin
+    runs-on: ubuntu-latest
+    needs: [go, frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build everything
+        run: |
+          mage build:linux
+          npm run build
+
+      - name: Validate plugin.json
+        run: |
+          if ! jq . plugin.json > /dev/null 2>&1; then
+            echo "plugin.json is not valid JSON"
+            exit 1
+          fi
+          echo "plugin.json is valid"
+
+      - name: Check for secrets in code
+        run: |
+          # Ensure no API keys or bearer tokens are hardcoded.
+          if grep -r --include="*.go" --include="*.ts" --include="*.tsx" \
+            -E "(Bearer|api[_-]?key|apikey)\s*[:=]\s*['\"][a-zA-Z0-9]{20,}" . \
+            --exclude-dir=node_modules --exclude-dir=.git; then
+            echo "ERROR: Potential hardcoded secret detected"
+            exit 1
+          fi
+          echo "No hardcoded secrets found"

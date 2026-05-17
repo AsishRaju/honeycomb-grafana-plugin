@@ -1,0 +1,22 @@
+# Grafana provisioning configuration for the Honeycomb datasource.
+#
+# Copy this file to your Grafana provisioning/datasources directory and
+# replace the placeholder values with your actual Honeycomb API key and
+# configuration.
+#
+# See https://grafana.com/docs/grafana/latest/administration/provisioning/
+# for full provisioning documentation.
+
+apiVersion: 1
+
+datasources:
+  - name: Honeycomb
+    type: honeycombio-honeycomb-datasource
+    access: proxy
+    isDefault: false
+    jsonData:
+      apiUrl: https://api.honeycomb.io  # Use https://api.eu1.honeycomb.io for EU accounts
+    secureJsonData:
+      apiKey: "${HONEYCOMB_API_KEY}"  # Set via environment variable; never hardcode
+    version: 1
+    editable: true

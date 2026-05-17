@@ -1,0 +1,70 @@
+{
+  "id": "honeycombio-honeycomb-datasource",
+  "name": "Honeycomb",
+  "type": "datasource",
+  "category": "observability",
+  "backend": true,
+  "executable": "gpx_honeycomb-datasource",
+  "alerting": true,
+  "streaming": false,
+  "logs": false,
+  "metrics": true,
+  "tracing": false,
+  "annotations": true,
+  "info": {
+    "description": "Query Honeycomb datasets directly from Grafana. Supports timeseries, table, and stat panels with full group-by / breakdown support, deep links into Honeycomb, and aggressive caching to stay within API rate limits.",
+    "author": {
+      "name": "Honeycomb.io",
+      "url": "https://www.honeycomb.io"
+    },
+    "keywords": [
+      "honeycomb",
+      "observability",
+      "traces",
+      "metrics",
+      "high-cardinality",
+      "heatmap"
+    ],
+    "logos": {
+      "small": "img/logo.svg",
+      "large": "img/logo.svg"
+    },
+    "links": [
+      {
+        "name": "Documentation",
+        "url": "https://github.com/honeycombio/grafana-honeycomb-datasource/blob/main/README.md"
+      },
+      {
+        "name": "Report an issue",
+        "url": "https://github.com/honeycombio/grafana-honeycomb-datasource/issues"
+      }
+    ],
+    "screenshots": [],
+    "version": "0.1.0",
+    "updated": "2025-01-15"
+  },
+  "includes": [
+    {
+      "type": "dashboard",
+      "name": "Honeycomb Example Dashboard",
+      "path": "dashboards/example.json",
+      "icon": "dashboard",
+      "description": "Example dashboard demonstrating timeseries, table, and stat panel types."
+    }
+  ],
+  "dependencies": {
+    "grafanaVersion": "10.0.0",
+    "plugins": []
+  },
+  "routes": [],
+  "secureJsonFields": {
+    "apiKey": true
+  },
+  "jsonData": {
+    "apiUrl": {
+      "label": "API URL",
+      "description": "Honeycomb API base URL. Use https://api.eu1.honeycomb.io for EU accounts.",
+      "secure": false
+    }
+  }
+}

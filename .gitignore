@@ -1,0 +1,31 @@
+node_modules/
+dist/
+coverage/
+
+# Go build artifacts
+*.exe
+*.out
+
+# Grafana plugin binary
+gpx_honeycomb-datasource*
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Test output
+test-results/
+
+# Go vendor (if used)
+vendor/
+
+# Environment
+.env
+.env.local
+
+# Webpack / build cache
+.cache/

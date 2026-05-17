@@ -1,0 +1,173 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_HONEYCOMB",
+      "label": "Honeycomb",
+      "description": "Honeycomb datasource",
+      "type": "datasource",
+      "pluginId": "honeycombio-honeycomb-datasource",
+      "pluginName": "Honeycomb"
+    }
+  ],
+  "__elements": {},
+  "__requires": [
+    {
+      "type": "datasource",
+      "id": "honeycombio-honeycomb-datasource",
+      "name": "Honeycomb",
+      "version": "0.1.0"
+    }
+  ],
+  "annotations": {
+    "list": []
+  },
+  "description": "Example Honeycomb Grafana dashboard demonstrating timeseries, table, and stat panels.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "honeycombio-honeycomb-datasource",
+        "uid": "${DS_HONEYCOMB}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisPlacement": "auto",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "auto"
+          }
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "honeycombio-honeycomb-datasource", "uid": "${DS_HONEYCOMB}" },
+          "refId": "A",
+          "dataset": "${dataset}",
+          "queryMode": "timeseries",
+          "calculations": [{ "op": "COUNT" }],
+          "filters": [],
+          "filterCombination": "AND",
+          "breakdowns": ["service.name"],
+          "orders": [{ "op": "COUNT", "order": "descending" }],
+          "limit": 10,
+          "granularity": 0,
+          "compareTimeOffset": 0,
+          "rawMode": false
+        }
+      ],
+      "title": "Request Count by Service (Timeseries)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "honeycombio-honeycomb-datasource",
+        "uid": "${DS_HONEYCOMB}"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "id": 2,
+      "options": { "footer": { "show": false } },
+      "targets": [
+        {
+          "datasource": { "type": "honeycombio-honeycomb-datasource", "uid": "${DS_HONEYCOMB}" },
+          "refId": "A",
+          "dataset": "${dataset}",
+          "queryMode": "table",
+          "calculations": [
+            { "op": "COUNT" },
+            { "op": "P99", "column": "duration_ms" }
+          ],
+          "filters": [],
+          "filterCombination": "AND",
+          "breakdowns": ["service.name", "http.status_code"],
+          "orders": [{ "op": "COUNT", "order": "descending" }],
+          "limit": 50,
+          "granularity": 0,
+          "rawMode": false
+        }
+      ],
+      "title": "Top Services & Status Codes (Table)",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "honeycombio-honeycomb-datasource",
+        "uid": "${DS_HONEYCOMB}"
+      },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "thresholds" } }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 8 },
+      "id": 3,
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "auto",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "honeycombio-honeycomb-datasource", "uid": "${DS_HONEYCOMB}" },
+          "refId": "A",
+          "dataset": "${dataset}",
+          "queryMode": "stat",
+          "calculations": [{ "op": "COUNT" }],
+          "filters": [],
+          "filterCombination": "AND",
+          "breakdowns": [],
+          "limit": 1,
+          "rawMode": false
+        }
+      ],
+      "title": "Total Requests",
+      "type": "stat"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["honeycomb", "observability"],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "datasource": {
+          "type": "honeycombio-honeycomb-datasource",
+          "uid": "${DS_HONEYCOMB}"
+        },
+        "definition": "datasets",
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "name": "dataset",
+        "options": [],
+        "query": {
+          "queryType": "datasets"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "type": "query",
+        "label": "Dataset"
+      }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Honeycomb Example",
+  "uid": "honeycomb-example",
+  "version": 1
+}

@@ -1,0 +1,114 @@
+# Contributing to grafana-honeycomb-datasource
+
+Thank you for contributing! This guide covers everything you need to set up a local development environment, run tests, and submit a pull request.
+
+## Prerequisites
+
+| Tool | Minimum version | Notes |
+|------|----------------|-------|
+| Go   | 1.22           | `go version` |
+| Node | 20             | `node --version` |
+| npm  | 10             | bundled with Node 20 |
+| Mage | 1.15           | `go install github.com/magefile/mage@latest` |
+| Docker | any recent | for local Grafana |
+
+## Local development
+
+### 1. Clone and install
+
+```bash
+git clone https://github.com/honeycombio/grafana-honeycomb-datasource
+cd grafana-honeycomb-datasource
+npm install
+go mod download
+```
+
+### 2. Build
+
+```bash
+# Build the Go backend binary (Linux; use build:darwin for macOS):
+mage build:darwin
+
+# Build the TypeScript frontend:
+npm run build
+```
+
+For a watch-mode development cycle:
+
+```bash
+# Terminal 1 – rebuild frontend on changes:
+npm run dev
+
+# Terminal 2 – rebuild backend when Go files change (requires gow or similar):
+# Or just re-run mage build:darwin after changes.
+```
+
+### 3. Run Grafana locally
+
+```bash
+docker-compose up
+```
+
+Open http://localhost:3000 (admin/admin). Add the Honeycomb datasource via Settings → Data sources.
+
+> **Note:** The Docker Compose config sets `GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS` so unsigned development builds work locally.
+
+### 4. Run tests
+
+```bash
+# Go tests:
+go test -v -race ./...
+
+# TypeScript tests:
+npm test
+
+# Lint (Go):
+golangci-lint run
+
+# Lint (TypeScript):
+npm run lint
+```
+
+## Code organization
+
+```
+pkg/
+  honeycomb/    Honeycomb API client (HTTP, types, errors)
+  fingerprint/  Query normalization and cache key generation
+  cache/        TTL cache + singleflight deduplication
+  ratelimit/    Token bucket limiter (8 tokens/60 s)
+  transform/    Honeycomb response → Grafana DataFrames, deep links
+  plugin/       Grafana backend datasource (QueryData, CheckHealth, CallResource)
+
+src/
+  components/   React query editor, config editor, variable editor
+  datasource.ts Frontend datasource class (template vars, filter, metadata)
+  types.ts      Shared TypeScript types
+  module.ts     Plugin entry point
+```
+
+## Making changes
+
+1. **Open an issue** first for non-trivial changes to discuss the approach.
+2. **Fork** the repository and create a branch: `git checkout -b fix/my-bug`.
+3. **Make your changes** and add/update tests.
+4. **Run the full test suite** before submitting.
+5. **Update CHANGELOG.md** under `[Unreleased]`.
+6. **Open a PR** with a clear description of what changed and why.
+
+## Commit conventions
+
+We use conventional commits loosely:
+- `fix: ...` for bug fixes
+- `feat: ...` for new features
+- `refactor: ...` for internal changes with no behaviour change
+- `docs: ...` for documentation only
+- `test: ...` for test additions
+
+## Versioning
+
+This project follows [Semantic Versioning](https://semver.org). Breaking changes to the query model (stored in Grafana's panel JSON) require a major version bump and a migration note in `CHANGELOG.md`.
+
+## Security issues
+
+Please see [SECURITY.md](SECURITY.md) for how to report security vulnerabilities. Do **not** open public GitHub issues for security bugs.
