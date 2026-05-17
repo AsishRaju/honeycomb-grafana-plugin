@@ -1,10 +1,7 @@
 import {
-  DataQueryRequest,
-  DataQueryResponse,
   DataSourceInstanceSettings,
   MetricFindValue,
   ScopedVars,
-  dateTime,
 } from '@grafana/data';
 import { DataSourceWithBackend, getTemplateSrv } from '@grafana/runtime';
 

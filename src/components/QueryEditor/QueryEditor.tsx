@@ -18,7 +18,6 @@ import { css } from '@emotion/css';
 import { HoneycombDataSource } from '../../datasource';
 import {
   ALL_DATASETS_SLUG,
-  CalculationOp,
   ColumnMeta,
   HoneycombDataSourceOptions,
   HoneycombQuery,
@@ -54,8 +53,6 @@ export function QueryEditor({ datasource, query, onChange, onRunQuery }: Props) 
   const [columns, setColumns] = useState<ColumnMeta[]>([]);
   const [loadingDatasets, setLoadingDatasets] = useState(false);
   const [loadingColumns, setLoadingColumns] = useState(false);
-  const [honeycombUrl, setHoneycombUrl] = useState<string | undefined>();
-
   // Load datasets on mount.
   useEffect(() => {
     setLoadingDatasets(true);

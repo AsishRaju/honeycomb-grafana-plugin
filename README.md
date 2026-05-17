@@ -27,7 +27,7 @@ A production-grade Grafana backend data source plugin for [Honeycomb](https://ww
 
 ## Requirements
 
-- Grafana ≥ 10.0.0
+- Grafana ≥ 11.0.0
 - A Honeycomb Configuration API key with **Manage Queries and Columns** and **Run Queries** permissions
 
 ---

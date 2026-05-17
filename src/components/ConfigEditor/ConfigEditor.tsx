@@ -1,6 +1,6 @@
 import React, { ChangeEvent } from 'react';
 import { DataSourcePluginOptionsEditorProps, SelectableValue } from '@grafana/data';
-import { Field, Input, SecretInput, Select, FieldSet, InlineLabel, Alert } from '@grafana/ui';
+import { Field, Input, SecretInput, Select, FieldSet, Alert } from '@grafana/ui';
 
 import { HoneycombDataSourceOptions, HoneycombSecureJsonData, DEFAULT_API_URL, EU_API_URL } from '../../types';
 

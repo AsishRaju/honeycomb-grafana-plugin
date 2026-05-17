@@ -2,7 +2,7 @@ import React from 'react';
 import { SelectableValue } from '@grafana/data';
 import { Button, IconButton, InlineField, InlineFieldRow, RadioButtonGroup, Select } from '@grafana/ui';
 
-import { Calculation, CalculationOp, CALCULATION_OPS, Order } from '../../types';
+import { Calculation, CalculationOp, Order } from '../../types';
 
 interface Props {
   orders: Order[];

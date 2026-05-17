@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SelectableValue } from '@grafana/data';
-import { Field, InlineField, InlineFieldRow, Select } from '@grafana/ui';
+import { InlineField, InlineFieldRow, Select } from '@grafana/ui';
 
 import { HoneycombDataSource } from '../../datasource';
 import { ALL_DATASETS_SLUG, DatasetMeta, VariableQuery, VariableQueryType } from '../../types';
