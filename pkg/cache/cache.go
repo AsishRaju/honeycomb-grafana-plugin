@@ -114,18 +114,18 @@ func (c *Cache) deleteExpired() {
 // ---------------------------------------------------------------------------
 
 const (
-	// TTLQueryID is the TTL for L1 (query shape → query_id).
-	// Honeycomb queries are immutable once created; 1 h is conservative.
-	TTLQueryID = 1 * time.Hour
+	// DefaultTTLQueryID is the default TTL for L1 (query shape → query_id).
+	// Honeycomb queries are immutable once created.
+	DefaultTTLQueryID = 30 * time.Minute
 
-	// TTLQueryResultID is the TTL for L2 (execution key → query_result_id).
+	// DefaultTTLQueryResultID is the default TTL for L2 (execution key → query_result_id).
 	// A result_id may still be in a "pending" state; we retain it so we can
 	// poll it rather than re-submit.
-	TTLQueryResultID = 30 * time.Minute
+	DefaultTTLQueryResultID = 10 * time.Minute
 
-	// TTLCompletedResult is the TTL for L3 (result_id → completed result).
-	// Matches Honeycomb's Cache-Control: private, max-age=86400.
-	TTLCompletedResult = 24 * time.Hour
+	// DefaultTTLCompletedResult is the default TTL for L3 (result_id → completed result).
+	// Completed results are immutable; Honeycomb allows up to 24 h.
+	DefaultTTLCompletedResult = 2 * time.Hour
 
 	// TTLMetadata is the TTL for dataset and column metadata.
 	TTLMetadata = 5 * time.Minute

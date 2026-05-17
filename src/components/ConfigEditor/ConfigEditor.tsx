@@ -1,6 +1,6 @@
 import React, { ChangeEvent } from 'react';
 import { DataSourcePluginOptionsEditorProps, SelectableValue } from '@grafana/data';
-import { Field, Input, SecretInput, Select, FieldSet, Alert } from '@grafana/ui';
+import { Field, Input, SecretInput, Select, FieldSet, Alert, CollapsableSection } from '@grafana/ui';
 
 import { HoneycombDataSourceOptions, HoneycombSecureJsonData, DEFAULT_API_URL, EU_API_URL } from '../../types';
 
@@ -56,6 +56,14 @@ export function ConfigEditor({ options, onOptionsChange }: Props) {
     });
   };
 
+  const onCacheTTLChange = (field: keyof HoneycombDataSourceOptions) => (e: ChangeEvent<HTMLInputElement>) => {
+    const val = parseInt(e.target.value, 10);
+    onOptionsChange({
+      ...options,
+      jsonData: { ...jsonData, [field]: isNaN(val) ? undefined : val },
+    });
+  };
+
   return (
     <div>
       <FieldSet label="Connection">
@@ -104,12 +112,12 @@ export function ConfigEditor({ options, onOptionsChange }: Props) {
       </FieldSet>
 
       <Alert title="API Rate Limits" severity="info">
-        Honeycomb limits query execution to <strong>10 requests per minute</strong>. This plugin
-        uses aggressive caching (up to 24 hours for completed results) and a token-bucket rate
-        limiter to stay within this limit. Dashboards with many panels sharing the same query will
-        automatically coalesce requests. See the{' '}
+        Honeycomb limits query execution to <strong>10 requests per minute per team</strong>. This
+        plugin uses multi-level caching and a token-bucket rate limiter to stay within this limit.
+        Dashboards with many panels sharing the same query will automatically coalesce requests. See
+        the{' '}
         <a
-          href="https://github.com/honeycombio/grafana-honeycomb-datasource/blob/main/docs/adr/ADR-002-caching-strategy.md"
+          href="https://github.com/honeycombio/grafana-honeycomb-datasource/blob/main/docs/caching.md"
           target="_blank"
           rel="noopener noreferrer"
         >
@@ -117,6 +125,50 @@ export function ConfigEditor({ options, onOptionsChange }: Props) {
         </a>{' '}
         for details.
       </Alert>
+
+      <CollapsableSection label="Cache Settings" isOpen={false}>
+        <Field
+          label="L1 TTL — Query ID cache (minutes)"
+          description="How long to cache the mapping from query shape to Honeycomb query_id. Honeycomb queries are immutable, so this avoids re-creating the same query definition. Does not count against rate limits."
+        >
+          <Input
+            type="number"
+            min={1}
+            value={jsonData.cacheTtlL1Minutes ?? 30}
+            onChange={onCacheTTLChange('cacheTtlL1Minutes')}
+            placeholder="30"
+            width={10}
+          />
+        </Field>
+
+        <Field
+          label="L2 TTL — Query Result ID cache (minutes)"
+          description="How long to cache the query_result_id for a submitted query. Prevents re-submitting to the rate-limited Create Query Result endpoint (10 req/min per team). Higher values reduce rate-limited calls but may return staler result pointers."
+        >
+          <Input
+            type="number"
+            min={1}
+            value={jsonData.cacheTtlL2Minutes ?? 10}
+            onChange={onCacheTTLChange('cacheTtlL2Minutes')}
+            placeholder="10"
+            width={10}
+          />
+        </Field>
+
+        <Field
+          label="L3 TTL — Completed Result cache (minutes)"
+          description="How long to cache completed query results. Completed results are immutable in Honeycomb (Honeycomb allows up to 24 hours). Higher values mean zero API calls for repeated queries but data won't reflect new events until the cache expires."
+        >
+          <Input
+            type="number"
+            min={1}
+            value={jsonData.cacheTtlL3Minutes ?? 120}
+            onChange={onCacheTTLChange('cacheTtlL3Minutes')}
+            placeholder="120"
+            width={10}
+          />
+        </Field>
+      </CollapsableSection>
     </div>
   );
 }

@@ -87,13 +87,15 @@ Each `service.name` value will appear as a separate time series. Click any data 
 
 ## How caching works
 
-Honeycomb limits Create Query Result to **10 requests/minute**. The plugin uses a three-level cache to minimize these calls:
+Honeycomb limits Create Query Result to **10 requests/minute per team**. The plugin uses a three-level cache to minimize these calls:
 
-| Level | Caches | TTL | Benefit |
-|-------|--------|-----|---------|
-| L1 | Query spec → `query_id` | 1 hour | Reuse the same Honeycomb query across time range changes |
-| L2 | Execution context → `query_result_id` | 30 min | Skip re-submission for recently-run queries |
-| L3 | `query_result_id` → completed result | 24 hours | Serve identical queries from memory without any Honeycomb call |
+| Level | Caches | Default TTL | Benefit |
+|-------|--------|-------------|---------|
+| L1 | Query spec → `query_id` | 30 min | Reuse the same Honeycomb query across time range changes |
+| L2 | Execution context → `query_result_id` | 10 min | Skip re-submission for recently-run queries |
+| L3 | `query_result_id` → completed result | 2 hours | Serve identical queries from memory without any Honeycomb call |
+
+All TTLs are configurable in the data source settings.
 
 On a steady-state dashboard, panel refreshes almost always hit L3 (in-memory, microsecond latency). Only cold cache loads or new time ranges hit the rate-limited Create Query Result endpoint.
 

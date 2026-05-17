@@ -36,7 +36,10 @@ var (
 
 // datasourceSettings is the non-secret configuration stored in jsonData.
 type datasourceSettings struct {
-	APIURL string `json:"apiUrl"`
+	APIURL               string `json:"apiUrl"`
+	CacheTTLL1Minutes    int    `json:"cacheTtlL1Minutes"`
+	CacheTTLL2Minutes    int    `json:"cacheTtlL2Minutes"`
+	CacheTTLL3Minutes    int    `json:"cacheTtlL3Minutes"`
 }
 
 // Datasource is a single configured Honeycomb data source instance.
@@ -49,6 +52,10 @@ type Datasource struct {
 	sfGroup cache.Group
 	limiter *ratelimit.Limiter
 	logger  log.Logger
+
+	ttlL1 time.Duration
+	ttlL2 time.Duration
+	ttlL3 time.Duration
 }
 
 // NewDatasource is called by Grafana whenever a data source instance is
@@ -78,12 +85,28 @@ func NewDatasource(ctx context.Context, settings backend.DataSourceInstanceSetti
 
 	logger.Debug("Honeycomb datasource initialized", "apiUrl", dsSettings.APIURL)
 
+	ttlL1 := cache.DefaultTTLQueryID
+	if dsSettings.CacheTTLL1Minutes > 0 {
+		ttlL1 = time.Duration(dsSettings.CacheTTLL1Minutes) * time.Minute
+	}
+	ttlL2 := cache.DefaultTTLQueryResultID
+	if dsSettings.CacheTTLL2Minutes > 0 {
+		ttlL2 = time.Duration(dsSettings.CacheTTLL2Minutes) * time.Minute
+	}
+	ttlL3 := cache.DefaultTTLCompletedResult
+	if dsSettings.CacheTTLL3Minutes > 0 {
+		ttlL3 = time.Duration(dsSettings.CacheTTLL3Minutes) * time.Minute
+	}
+
 	return &Datasource{
 		uid:     settings.UID,
 		client:  client,
 		cache:   cache.New(5 * time.Minute), // janitor interval
 		limiter: ratelimit.New(),
 		logger:  logger,
+		ttlL1:   ttlL1,
+		ttlL2:   ttlL2,
+		ttlL3:   ttlL3,
 	}, nil
 }
 
@@ -243,11 +266,11 @@ func (d *Datasource) executeQuery(
 	}
 
 	// --- Store in L3 cache ---
-	d.cache.Set(fingerprint.CompletedResultKey(execKey), result, cache.TTLCompletedResult)
+	d.cache.Set(fingerprint.CompletedResultKey(execKey), result, d.ttlL3)
 	d.logger.Debug("Query complete, cached in L3",
 		"dataset", pq.Dataset,
 		"result_id", queryResultID,
-		"ttl_hours", cache.TTLCompletedResult.Hours(),
+		"ttl", d.ttlL3.String(),
 	)
 
 	return result, nil
@@ -266,7 +289,7 @@ func (d *Datasource) getOrCreateQueryID(ctx context.Context, dataset string, hq 
 	if err != nil {
 		return "", err
 	}
-	d.cache.Set(cacheKey, queryID, cache.TTLQueryID)
+	d.cache.Set(cacheKey, queryID, d.ttlL1)
 	d.logger.Debug("Created query, cached in L1", "dataset", dataset, "query_id", queryID)
 	return queryID, nil
 }
@@ -307,7 +330,7 @@ func (d *Datasource) getOrCreateQueryResultID(ctx context.Context, dataset, quer
 		return "", err
 	}
 
-	d.cache.Set(cacheKey, resp.ID, cache.TTLQueryResultID)
+	d.cache.Set(cacheKey, resp.ID, d.ttlL2)
 	d.logger.Debug("Created query result, cached in L2",
 		"dataset", dataset,
 		"query_result_id", resp.ID,
