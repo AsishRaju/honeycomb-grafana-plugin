@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { QueryEditorProps, SelectableValue } from '@grafana/data';
 import {
   Button,
@@ -45,38 +45,64 @@ export function QueryEditor({ datasource, query, onChange, onRunQuery }: Props) 
   const theme = useTheme2();
   const styles = getStyles(theme);
 
-  const q: HoneycombQuery = { ...defaultQuery(), ...query } as HoneycombQuery;
+  const q = useMemo<HoneycombQuery>(
+    () => ({ ...defaultQuery(), ...query }) as HoneycombQuery,
+    [query]
+  );
 
   const allDatasetsOption: SelectableValue<string> = { label: 'All Datasets', value: ALL_DATASETS_SLUG, description: 'Query across all datasets in the environment' };
 
   const [datasets, setDatasets] = useState<Array<SelectableValue<string>>>([allDatasetsOption]);
   const [columns, setColumns] = useState<ColumnMeta[]>([]);
-  const [loadingDatasets, setLoadingDatasets] = useState(false);
+  const [loadingDatasets, setLoadingDatasets] = useState(true);
   const [loadingColumns, setLoadingColumns] = useState(false);
-  // Load datasets on mount.
+
   useEffect(() => {
-    setLoadingDatasets(true);
+    let cancelled = false;
     datasource
       .listDatasets()
       .then((ds) => {
-        setDatasets([allDatasetsOption, ...ds.map((d) => ({ label: d.name, value: d.slug, description: d.description }))]);
+        if (!cancelled) {
+          setDatasets([allDatasetsOption, ...ds.map((d) => ({ label: d.name, value: d.slug, description: d.description }))]);
+        }
       })
-      .catch(() => setDatasets([allDatasetsOption]))
-      .finally(() => setLoadingDatasets(false));
+      .catch(() => {
+        if (!cancelled) {
+          setDatasets([allDatasetsOption]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingDatasets(false);
+        }
+      });
+    return () => { cancelled = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load columns when dataset changes.
   useEffect(() => {
     if (!q.dataset) {
-      setColumns([]);
       return;
     }
-    setLoadingColumns(true);
+    let cancelled = false;
+    setLoadingColumns(true); // eslint-disable-line react-hooks/set-state-in-effect
     datasource
       .listColumns(q.dataset)
-      .then(setColumns)
-      .catch(() => setColumns([]))
-      .finally(() => setLoadingColumns(false));
+      .then((cols) => {
+        if (!cancelled) {
+          setColumns(cols);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setColumns([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingColumns(false);
+        }
+      });
+    return () => { cancelled = true; };
   }, [q.dataset]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const update = useCallback(
