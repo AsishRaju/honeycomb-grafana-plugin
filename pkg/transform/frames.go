@@ -146,7 +146,7 @@ func toTimeseriesFrames(result *honeycomb.QueryResultResponse, opts FrameOptions
 		}
 
 		frame := data.NewFrame("", data.NewField("time", nil, timeVals))
-		frame.SetMeta(&data.FrameMeta{Type: data.FrameTypeTimeSeriesMany})
+		frame.SetMeta(&data.FrameMeta{Type: data.FrameTypeTimeSeriesMulti})
 
 		for _, col := range calcCols {
 			fieldVals := make([]*float64, len(g.timePoints))
