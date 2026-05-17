@@ -113,8 +113,8 @@ jobs:
 
       - name: Validate plugin.json
         run: |
-          if ! jq . plugin.json > /dev/null 2>&1; then
-            echo "plugin.json is not valid JSON"
+          if ! jq . src/plugin.json > /dev/null 2>&1; then
+            echo "src/plugin.json is not valid JSON"
             exit 1
           fi
           echo "plugin.json is valid"
