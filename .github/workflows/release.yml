@@ -39,18 +39,18 @@ jobs:
       - name: Package plugin
         id: package
         run: |
-          PLUGIN_ID=$(jq -r .id plugin.json)
+          PLUGIN_ID=$(jq -r .id src/plugin.json)
           PLUGIN_VERSION=${GITHUB_REF#refs/tags/v}
           ARCHIVE="${PLUGIN_ID}-${PLUGIN_VERSION}.zip"
 
-          # Create dist directory if needed.
-          mkdir -p dist
+          # Copy plugin.json into dist (webpack already builds frontend there).
+          cp src/plugin.json dist/plugin.json
 
           # Copy required plugin files into dist.
           cp -r img dist/ 2>/dev/null || true
 
           # Zip everything up.
-          zip -r "${ARCHIVE}" dist/ plugin.json LICENSE README.md provisioning/
+          zip -r "${ARCHIVE}" dist/ LICENSE README.md provisioning/
 
           echo "archive=${ARCHIVE}" >> "$GITHUB_OUTPUT"
           echo "plugin_version=${PLUGIN_VERSION}" >> "$GITHUB_OUTPUT"

@@ -21,6 +21,8 @@ const (
 	defaultAPIURL      = "https://api.honeycomb.io"
 	defaultHTTPTimeout = 30 * time.Second
 
+	pluginVersion = "0.1.0"
+
 	// Polling config for Get Query Result.
 	pollInitialInterval = 200 * time.Millisecond
 	pollMaxInterval     = 1 * time.Second
@@ -211,7 +213,7 @@ func (c *Client) do(ctx context.Context, method, path string, body, dest interfa
 	req.Header.Set("X-Honeycomb-Team", c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "grafana-honeycomb-datasource/0.1.0")
+	req.Header.Set("User-Agent", "grafana-honeycomb-datasource/"+pluginVersion)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
