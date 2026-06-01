@@ -36,22 +36,36 @@ var (
 
 // datasourceSettings is the non-secret configuration stored in jsonData.
 type datasourceSettings struct {
-	APIURL               string `json:"apiUrl"`
-	CacheTTLL1Minutes    int    `json:"cacheTtlL1Minutes"`
-	CacheTTLL2Minutes    int    `json:"cacheTtlL2Minutes"`
-	CacheTTLL3Minutes    int    `json:"cacheTtlL3Minutes"`
+	APIURL string `json:"apiUrl"`
+
+	// Team and Environment power deep links into ui.honeycomb.io. Both empty =
+	// fall back to the query URL Honeycomb returns alongside results.
+	Team        string `json:"team"`
+	Environment string `json:"environment"`
+
+	// TimeWindowDays clamps query time ranges before they reach Honeycomb.
+	// 0 = unbounded. Default is defaultTimeWindowDays.
+	TimeWindowDays int `json:"timeWindowDays"`
+
+	CacheTTLL1Minutes int `json:"cacheTtlL1Minutes"`
+	CacheTTLL2Minutes int `json:"cacheTtlL2Minutes"`
+	CacheTTLL3Minutes int `json:"cacheTtlL3Minutes"`
 }
+
+// defaultTimeWindowDays mirrors the frontend default (DEFAULT_TIME_WINDOW_DAYS).
+const defaultTimeWindowDays = 7
 
 // Datasource is a single configured Honeycomb data source instance.
 // Grafana creates one Datasource per configured data source; they are
 // replaced on settings changes.
 type Datasource struct {
-	uid     string
-	client  *honeycomb.Client
-	cache   *cache.Cache
-	sfGroup cache.Group
-	limiter *ratelimit.Limiter
-	logger  log.Logger
+	uid      string
+	settings datasourceSettings
+	client   *honeycomb.Client
+	cache    *cache.Cache
+	sfGroup  cache.Group
+	limiter  *ratelimit.Limiter
+	logger   log.Logger
 
 	ttlL1 time.Duration
 	ttlL2 time.Duration
@@ -83,7 +97,16 @@ func NewDatasource(ctx context.Context, settings backend.DataSourceInstanceSetti
 		return nil, fmt.Errorf("create honeycomb client: %w", err)
 	}
 
-	logger.Debug("Honeycomb datasource initialized", "apiUrl", dsSettings.APIURL)
+	if dsSettings.TimeWindowDays == 0 {
+		dsSettings.TimeWindowDays = defaultTimeWindowDays
+	}
+
+	logger.Debug("Honeycomb datasource initialized",
+		"apiUrl", dsSettings.APIURL,
+		"team", dsSettings.Team,
+		"environment", dsSettings.Environment,
+		"timeWindowDays", dsSettings.TimeWindowDays,
+	)
 
 	ttlL1 := cache.DefaultTTLQueryID
 	if dsSettings.CacheTTLL1Minutes > 0 {
@@ -99,14 +122,15 @@ func NewDatasource(ctx context.Context, settings backend.DataSourceInstanceSetti
 	}
 
 	return &Datasource{
-		uid:     settings.UID,
-		client:  client,
-		cache:   cache.New(5 * time.Minute), // janitor interval
-		limiter: ratelimit.New(),
-		logger:  logger,
-		ttlL1:   ttlL1,
-		ttlL2:   ttlL2,
-		ttlL3:   ttlL3,
+		uid:      settings.UID,
+		settings: dsSettings,
+		client:   client,
+		cache:    cache.New(5 * time.Minute), // janitor interval
+		limiter:  ratelimit.New(),
+		logger:   logger,
+		ttlL1:    ttlL1,
+		ttlL2:    ttlL2,
+		ttlL3:    ttlL3,
 	}, nil
 }
 
@@ -174,6 +198,24 @@ func (d *Datasource) runQuery(ctx context.Context, gq backend.DataQuery) backend
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("query validation: %v", err))
 	}
 
+	// Dispatch SLO queries to a separate path that uses /1/slos/* rather than
+	// the events query API. SLO results have their own caching keys (no
+	// rate-limit pressure on Create Query Result).
+	if pq.QueryType == QueryTypeSLO {
+		return d.runSLOQuery(ctx, pq)
+	}
+
+	// Logs and Traces both build a Query Data API call under the hood but
+	// with very different shapes (no calc + breakdowns of attrs for logs;
+	// filtered breakdown of span fields for traces). Route to dedicated
+	// builders that produce the right HoneycombQuery and frame transformer.
+	if pq.QueryType == QueryTypeLogs {
+		return d.runLogsQuery(ctx, gq, pq)
+	}
+	if pq.QueryType == QueryTypeTraces {
+		return d.runTracesQuery(ctx, gq, pq)
+	}
+
 	// Build the base Honeycomb query (without time range — applied separately
 	// so L1 cache (query_id) is time-independent).
 	hq, err := pq.ToHoneycombQuery()
@@ -181,10 +223,13 @@ func (d *Datasource) runQuery(ctx context.Context, gq backend.DataQuery) backend
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("build honeycomb query: %v", err))
 	}
 
-	// Apply time range and derive granularity if needed.
-	from := gq.TimeRange.From
+	// Apply time range, clamping by the configured time window if necessary.
+	// MaxDataPoints comes from Grafana's panel width — passing it lets the
+	// auto-granularity match chart fidelity instead of always sampling at
+	// ~100 buckets.
+	from := clampFrom(gq.TimeRange.From, gq.TimeRange.To, d.settings.TimeWindowDays)
 	to := gq.TimeRange.To
-	fingerprint.ApplyTimeRange(&hq, from, to, pq.Granularity)
+	fingerprint.ApplyTimeRange(&hq, from, to, pq.Granularity, gq.MaxDataPoints)
 
 	execSpec := fingerprint.ExecutionSpec{
 		QuerySpec: fingerprint.QuerySpec{
@@ -213,10 +258,14 @@ func (d *Datasource) runQuery(ctx context.Context, gq backend.DataQuery) backend
 
 	qr := result.(*honeycomb.QueryResultResponse)
 	frames, err := transform.ToFrames(qr, transform.FrameOptions{
-		Mode:      pq.FrameMode(),
-		QueryURL:  qr.Links.QueryURL,
-		GraphURL:  qr.Links.GraphImageURL,
-		MaxGroups: transform.DefaultMaxGroups,
+		Mode:        pq.FrameMode(),
+		QueryURL:    qr.Links.QueryURL,
+		GraphURL:    qr.Links.GraphImageURL,
+		MaxGroups:   transform.DefaultMaxGroups,
+		APIURL:      d.settings.APIURL,
+		Team:        d.settings.Team,
+		Environment: d.settings.Environment,
+		Dataset:     pq.Dataset,
 	})
 	if err != nil {
 		return backend.ErrDataResponse(backend.StatusInternal, fmt.Sprintf("transform results: %v", err))
@@ -341,6 +390,21 @@ func (d *Datasource) getOrCreateQueryResultID(ctx context.Context, dataset, quer
 // ---------------------------------------------------------------------------
 // CheckHealth
 // ---------------------------------------------------------------------------
+
+// clampFrom returns from clamped so that to-from never exceeds windowDays.
+// windowDays <= 0 disables clamping. If from is already within the window
+// (or after to, which Grafana shouldn't allow), it is returned unchanged.
+func clampFrom(from, to time.Time, windowDays int) time.Time {
+	if windowDays <= 0 {
+		return from
+	}
+	maxRange := time.Duration(windowDays) * 24 * time.Hour
+	earliest := to.Add(-maxRange)
+	if from.Before(earliest) {
+		return earliest
+	}
+	return from
+}
 
 // isHidden parses the "hide" flag from the raw query JSON. Grafana sets this
 // when a user toggles the eye icon in the query editor.

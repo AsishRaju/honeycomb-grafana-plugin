@@ -29,3 +29,6 @@ vendor/
 
 # Webpack / build cache
 .cache/
+
+# ESLint cache
+.eslintcache

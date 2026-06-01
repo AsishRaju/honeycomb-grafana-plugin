@@ -2,7 +2,13 @@ import React, { ChangeEvent } from 'react';
 import { DataSourcePluginOptionsEditorProps, SelectableValue } from '@grafana/data';
 import { Field, Input, SecretInput, Select, FieldSet, Alert, CollapsableSection } from '@grafana/ui';
 
-import { HoneycombDataSourceOptions, HoneycombSecureJsonData, DEFAULT_API_URL, EU_API_URL } from '../../types';
+import {
+  HoneycombDataSourceOptions,
+  HoneycombSecureJsonData,
+  DEFAULT_API_URL,
+  EU_API_URL,
+  DEFAULT_TIME_WINDOW_DAYS,
+} from '../../types';
 
 type Props = DataSourcePluginOptionsEditorProps<HoneycombDataSourceOptions, HoneycombSecureJsonData>;
 
@@ -64,6 +70,31 @@ export function ConfigEditor({ options, onOptionsChange }: Props) {
     });
   };
 
+  const onTeamChange = (e: ChangeEvent<HTMLInputElement>) => {
+    onOptionsChange({
+      ...options,
+      jsonData: { ...jsonData, team: e.target.value || undefined },
+    });
+  };
+
+  const onEnvironmentChange = (e: ChangeEvent<HTMLInputElement>) => {
+    onOptionsChange({
+      ...options,
+      jsonData: { ...jsonData, environment: e.target.value || undefined },
+    });
+  };
+
+  const onTimeWindowDaysChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const n = parseInt(e.target.value, 10);
+    onOptionsChange({
+      ...options,
+      jsonData: {
+        ...jsonData,
+        timeWindowDays: Number.isFinite(n) && n >= 0 ? n : undefined,
+      },
+    });
+  };
+
   return (
     <div>
       <FieldSet label="Connection">
@@ -107,6 +138,48 @@ export function ConfigEditor({ options, onOptionsChange }: Props) {
             width={40}
             onReset={onApiKeyReset}
             onChange={onApiKeyChange}
+          />
+        </Field>
+      </FieldSet>
+
+      <FieldSet label="Environment">
+        <Field
+          label="Team"
+          description="Honeycomb team slug — used in deep links to ui.honeycomb.io."
+        >
+          <Input
+            placeholder="my-team"
+            value={jsonData.team || ''}
+            onChange={onTeamChange}
+            width={32}
+          />
+        </Field>
+
+        <Field
+          label="Environment"
+          description="Honeycomb environment name. Leave blank for Classic accounts."
+        >
+          <Input
+            placeholder="production"
+            value={jsonData.environment || ''}
+            onChange={onEnvironmentChange}
+            width={32}
+          />
+        </Field>
+      </FieldSet>
+
+      <FieldSet label="Advanced">
+        <Field
+          label="Time Window (days)"
+          description="Maximum query time window in days. Longer ranges are clamped before sending to Honeycomb. 0 = unbounded."
+        >
+          <Input
+            type="number"
+            min={0}
+            placeholder={String(DEFAULT_TIME_WINDOW_DAYS)}
+            value={jsonData.timeWindowDays ?? ''}
+            onChange={onTimeWindowDaysChange}
+            width={12}
           />
         </Field>
       </FieldSet>

@@ -7,9 +7,9 @@
   "executable": "gpx_honeycomb-datasource",
   "alerting": true,
   "streaming": false,
-  "logs": false,
+  "logs": true,
   "metrics": true,
-  "tracing": false,
+  "tracing": true,
   "annotations": true,
   "info": {
     "description": "Query Honeycomb datasets directly from Grafana. Supports timeseries, table, and stat panels with full group-by / breakdown support, deep links into Honeycomb, and aggressive caching to stay within API rate limits.",
@@ -64,6 +64,21 @@
     "apiUrl": {
       "label": "API URL",
       "description": "Honeycomb API base URL. Use https://api.eu1.honeycomb.io for EU accounts.",
+      "secure": false
+    },
+    "team": {
+      "label": "Team",
+      "description": "Honeycomb team slug used in deep links to ui.honeycomb.io.",
+      "secure": false
+    },
+    "environment": {
+      "label": "Environment",
+      "description": "Honeycomb environment name. Leave blank for Classic accounts.",
+      "secure": false
+    },
+    "timeWindowDays": {
+      "label": "Time Window (days)",
+      "description": "Maximum query time window in days; longer ranges are clamped before sending to Honeycomb. 0 = unbounded.",
       "secure": false
     }
   }

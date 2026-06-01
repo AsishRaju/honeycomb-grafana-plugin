@@ -9,7 +9,13 @@ import (
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/honeycombio/grafana-honeycomb-datasource/pkg/cache"
+	"github.com/honeycombio/grafana-honeycomb-datasource/pkg/honeycomb"
 )
+
+// AllDatasetsSlug is Honeycomb's special meta-dataset for environment-wide
+// queries. /1/columns/__all__ is not a valid endpoint, so we short-circuit
+// metadata lookups for it.
+const AllDatasetsSlug = "__all__"
 
 // CallResource handles HTTP requests from the frontend to backend resource
 // endpoints. These endpoints power metadata discovery in the query editor
@@ -56,6 +62,12 @@ func (d *Datasource) handleListColumns(ctx context.Context, req *backend.CallRes
 	dataset := parsed.Query().Get("dataset")
 	if dataset == "" {
 		return sendError(sender, http.StatusBadRequest, "dataset query parameter is required")
+	}
+
+	// __all__ is Honeycomb's environment-wide meta-dataset. /1/columns/__all__
+	// returns 404; return an empty list so the editor falls back to free-text.
+	if dataset == AllDatasetsSlug {
+		return sendJSON(sender, http.StatusOK, []honeycomb.ColumnMeta{})
 	}
 
 	cacheKey := "meta:columns:" + dataset
