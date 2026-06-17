@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { QueryEditorProps, SelectableValue } from '@grafana/data';
+import { GrafanaTheme2, QueryEditorProps, SelectableValue } from '@grafana/data';
 import {
-  Button,
+  CollapsableSection,
   Field,
-  FieldSet,
   InlineField,
   InlineFieldRow,
   Input,
+  RadioButtonGroup,
   Select,
   Spinner,
   TextArea,
@@ -19,16 +19,24 @@ import { HoneycombDataSource } from '../../datasource';
 import {
   ALL_DATASETS_SLUG,
   ColumnMeta,
+  COMPARE_TIME_OFFSET_OPTIONS,
   HoneycombDataSourceOptions,
   HoneycombQuery,
   QUERY_MODE_OPTIONS,
+  QUERY_RESULT_TYPE_OPTIONS,
   QueryMode,
+  QueryResultType,
+  QueryType,
 } from '../../types';
 import { defaultQuery } from '../../defaults';
 import { CalculationsEditor } from './CalculationsEditor';
 import { FiltersEditor } from './FiltersEditor';
 import { GroupByEditor } from './GroupByEditor';
+import { HavingsEditor } from './HavingsEditor';
+import { LogsEditor } from './LogsEditor';
 import { OrderByEditor } from './OrderByEditor';
+import { SLOEditor } from './SLOEditor';
+import { TracesEditor } from './TracesEditor';
 
 type Props = QueryEditorProps<HoneycombDataSource, HoneycombQuery, HoneycombDataSourceOptions>;
 
@@ -54,17 +62,21 @@ export function QueryEditor({ datasource, query, onChange, onRunQuery }: Props) 
 
   const [datasets, setDatasets] = useState<Array<SelectableValue<string>>>([allDatasetsOption]);
   const [columns, setColumns] = useState<ColumnMeta[]>([]);
+  // Start in the loading state so the first paint shows a spinner without
+  // calling setState synchronously inside the effect body.
   const [loadingDatasets, setLoadingDatasets] = useState(true);
   const [loadingColumns, setLoadingColumns] = useState(false);
 
+  // Load datasets on mount.
   useEffect(() => {
     let cancelled = false;
     datasource
       .listDatasets()
       .then((ds) => {
-        if (!cancelled) {
-          setDatasets([allDatasetsOption, ...ds.map((d) => ({ label: d.name, value: d.slug, description: d.description }))]);
+        if (cancelled) {
+          return;
         }
+        setDatasets([allDatasetsOption, ...ds.map((d) => ({ label: d.name, value: d.slug, description: d.description }))]);
       })
       .catch(() => {
         if (!cancelled) {
@@ -76,15 +88,24 @@ export function QueryEditor({ datasource, query, onChange, onRunQuery }: Props) 
           setLoadingDatasets(false);
         }
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Load columns when dataset changes. __all__ has no columns endpoint —
+  // fall back to free-text input via allowCustomValue on the column selects.
   useEffect(() => {
-    if (!q.dataset) {
-      return;
+    if (!q.dataset || q.dataset === ALL_DATASETS_SLUG) {
+      const handle = setTimeout(() => setColumns([]), 0);
+      return () => clearTimeout(handle);
     }
     let cancelled = false;
-    setLoadingColumns(true); // eslint-disable-line react-hooks/set-state-in-effect
+    const handle = setTimeout(() => {
+      if (!cancelled) {
+        setLoadingColumns(true);
+      }
+    }, 0);
     datasource
       .listColumns(q.dataset)
       .then((cols) => {
@@ -102,7 +123,10 @@ export function QueryEditor({ datasource, query, onChange, onRunQuery }: Props) 
           setLoadingColumns(false);
         }
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
   }, [q.dataset]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const update = useCallback(
@@ -123,21 +147,99 @@ export function QueryEditor({ datasource, query, onChange, onRunQuery }: Props) 
       description: c.type,
     }));
 
-  if (q.rawMode) {
+  // Resolve effective queryType: queryType field takes precedence, but legacy
+  // dashboards may set rawMode=true without queryType — treat that as 'raw'.
+  const effectiveQueryType: QueryType =
+    (q.queryType as QueryType | undefined) ?? (q.rawMode ? 'raw' : 'metrics');
+
+  const queryTypeOptions: Array<SelectableValue<QueryType>> = [
+    { label: 'Metrics', value: 'metrics' },
+    { label: 'Logs', value: 'logs' },
+    { label: 'Traces', value: 'traces' },
+    { label: 'SLO', value: 'slo' },
+    { label: 'Raw Query', value: 'raw' },
+  ];
+
+  // Top header — Query Type and Dataset on a single row to keep the editor
+  // compact (the labelled controls fit comfortably side-by-side).
+  const header = (
+    <InlineFieldRow>
+      <InlineField label="Query Type" labelWidth={LABEL_WIDTH}>
+        <RadioButtonGroup
+          options={queryTypeOptions}
+          value={effectiveQueryType}
+          onChange={(v) => {
+            update({ queryType: v, rawMode: v === 'raw' });
+          }}
+        />
+      </InlineField>
+      <InlineField label="Dataset" labelWidth={12} grow>
+        {loadingDatasets ? (
+          <Spinner />
+        ) : (
+          <Select
+            options={datasets}
+            value={q.dataset}
+            onChange={(v) => update({ dataset: v.value ?? '' })}
+            allowCustomValue
+            placeholder="Choose dataset"
+            width={32}
+          />
+        )}
+      </InlineField>
+    </InlineFieldRow>
+  );
+
+  // SLO editor branch.
+  if (effectiveQueryType === 'slo') {
     return (
       <div className={styles.wrapper}>
-        <InlineFieldRow>
-          <InlineField label="Raw JSON mode" labelWidth={16}>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => update({ rawMode: false })}
-            >
-              Switch to visual editor
-            </Button>
-          </InlineField>
-        </InlineFieldRow>
+        {header}
+        <SLOEditor query={q} onChange={update} />
+        <div className={styles.runRow}>
+          <ToolbarButton variant="primary" onClick={handleRunQuery} icon="play">
+            Run query
+          </ToolbarButton>
+        </div>
+      </div>
+    );
+  }
 
+  // Logs editor branch — dedicated UX without calculations / breakdowns.
+  if (effectiveQueryType === 'logs') {
+    return (
+      <div className={styles.wrapper}>
+        {header}
+        <LogsEditor query={q} columns={columns} onChange={update} onRunQuery={handleRunQuery} />
+        <div className={styles.runRow}>
+          <ToolbarButton variant="primary" onClick={handleRunQuery} icon="play">
+            Run query
+          </ToolbarButton>
+        </div>
+      </div>
+    );
+  }
+
+  // Traces editor branch — single-trace fetch or search-and-link.
+  if (effectiveQueryType === 'traces') {
+    return (
+      <div className={styles.wrapper}>
+        {header}
+        <TracesEditor query={q} columns={columns} onChange={update} />
+        <div className={styles.runRow}>
+          <ToolbarButton variant="primary" onClick={handleRunQuery} icon="play">
+            Run query
+          </ToolbarButton>
+        </div>
+      </div>
+    );
+  }
+
+  // Raw query branch.
+  if (effectiveQueryType === 'raw') {
+    return (
+      <div className={styles.wrapper}>
+        {header}
         <Field
           label="Honeycomb Query JSON"
           description="Paste a raw Honeycomb Query API JSON object. Template variables are supported."
@@ -154,125 +256,137 @@ export function QueryEditor({ datasource, query, onChange, onRunQuery }: Props) 
     );
   }
 
+  // Default: metrics (events) editor.
   return (
     <div className={styles.wrapper}>
-      {/* Dataset + mode row */}
-      <InlineFieldRow>
-        <InlineField label="Dataset" labelWidth={12} grow>
-          {loadingDatasets ? (
-            <Spinner />
-          ) : (
-            <Select
-              options={datasets}
-              value={q.dataset}
-              onChange={(v) => {
-                update({ dataset: v.value ?? '' });
-              }}
-              allowCustomValue
-              placeholder="Select dataset or type slug"
-              width={24}
-            />
-          )}
-        </InlineField>
+      {header}
 
-        <InlineField label="Query mode" labelWidth={12}>
+      {/* Query mode + Returned data on a single compact row */}
+      <InlineFieldRow>
+        <InlineField label="Query mode" labelWidth={LABEL_WIDTH}>
           <Select
             options={QUERY_MODE_OPTIONS}
             value={q.queryMode}
             onChange={(v) => update({ queryMode: (v.value as QueryMode) ?? 'timeseries' })}
-            width={16}
+            width={20}
           />
         </InlineField>
-
-        <InlineField>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => update({ rawMode: true })}
-            title="Switch to raw JSON mode"
-          >
-            {'{ } Raw'}
-          </Button>
+        <InlineField
+          label="Returned data"
+          labelWidth={16}
+          tooltip="Which Honeycomb result fields to populate. 'auto' picks based on Query Mode."
+        >
+          <Select
+            options={QUERY_RESULT_TYPE_OPTIONS}
+            value={q.queryResultType ?? 'auto'}
+            onChange={(v) => update({ queryResultType: (v.value as QueryResultType) ?? 'auto' })}
+            width={20}
+          />
         </InlineField>
       </InlineFieldRow>
 
-      {/* Calculations */}
-      <FieldSet label="Calculations">
+      <Section label="Calculations" styles={styles}>
         <CalculationsEditor
           calculations={q.calculations ?? []}
           columnOptions={columnOptions}
           loadingColumns={loadingColumns}
           onChange={(calculations) => update({ calculations })}
         />
-      </FieldSet>
+      </Section>
 
-      {/* Filters */}
-      <FieldSet label="Filters">
+      <Section label="Filters" styles={styles}>
         <FiltersEditor
           filters={q.filters ?? []}
           filterCombination={q.filterCombination ?? 'AND'}
           columnOptions={columnOptions}
           onChange={(filters, filterCombination) => update({ filters, filterCombination })}
         />
-      </FieldSet>
+      </Section>
 
-      {/* Group by */}
-      <FieldSet label="Group by (Breakdowns)">
+      <Section label="Group by (Breakdowns)" styles={styles}>
         <GroupByEditor
           breakdowns={q.breakdowns ?? []}
           columnOptions={columnOptions}
           onChange={(breakdowns) => update({ breakdowns })}
         />
-      </FieldSet>
+      </Section>
 
-      {/* Order by */}
-      <FieldSet label="Order by">
+      <Section label="Order by" styles={styles}>
         <OrderByEditor
           orders={q.orders ?? []}
           calculations={q.calculations ?? []}
           breakdowns={q.breakdowns ?? []}
           onChange={(orders) => update({ orders })}
         />
-      </FieldSet>
+      </Section>
 
-      {/* Options row: limit, granularity */}
-      <InlineFieldRow>
-        <InlineField label="Limit" labelWidth={10} tooltip="Maximum number of result groups (1–10000)">
-          <Input
-            type="number"
-            min={1}
-            max={10000}
-            value={q.limit ?? 100}
-            onChange={(e) => update({ limit: parseInt(e.currentTarget.value, 10) || 100 })}
-            onBlur={handleRunQuery}
-            width={10}
-          />
-        </InlineField>
+      <Section label="Having (post-aggregation filters)" styles={styles}>
+        <HavingsEditor
+          havings={q.havings ?? []}
+          calculations={q.calculations ?? []}
+          onChange={(havings) => update({ havings })}
+        />
+      </Section>
 
-        <InlineField
-          label="Granularity (s)"
-          labelWidth={14}
-          tooltip="Time resolution in seconds. 0 = auto-derive from panel time range."
+      {/* Less-used options in a single collapsable row, mirroring Prometheus. */}
+      <div className={styles.optionsWrapper}>
+        <CollapsableSection
+          label={
+            <span className={styles.optionsLabel}>
+              Options{' '}
+              <span className={styles.optionsSummary}>
+                Limit: {q.limit ?? 100}, Granularity: {q.granularity ? `${q.granularity}s` : 'auto'},
+                Compare to: {compareLabel(q.compareTimeOffset)}
+              </span>
+            </span>
+          }
+          isOpen={false}
         >
-          <Input
-            type="number"
-            min={0}
-            value={q.granularity ?? 0}
-            onChange={(e) => update({ granularity: parseInt(e.currentTarget.value, 10) || 0 })}
-            onBlur={handleRunQuery}
-            placeholder="0 (auto)"
-            width={10}
-          />
-        </InlineField>
-      </InlineFieldRow>
+          <InlineFieldRow>
+            <InlineField label="Limit" labelWidth={LABEL_WIDTH} tooltip="Maximum number of result groups (1–10000)">
+              <Input
+                type="number"
+                min={1}
+                max={10000}
+                value={q.limit ?? 100}
+                onChange={(e) => update({ limit: parseInt(e.currentTarget.value, 10) || 100 })}
+                onBlur={handleRunQuery}
+                width={12}
+              />
+            </InlineField>
+            <InlineField
+              label="Granularity (s)"
+              labelWidth={16}
+              tooltip="Time resolution in seconds. 0 = auto-derive from panel time range."
+            >
+              <Input
+                type="number"
+                min={0}
+                value={q.granularity ?? 0}
+                onChange={(e) => update({ granularity: parseInt(e.currentTarget.value, 10) || 0 })}
+                onBlur={handleRunQuery}
+                placeholder="0 (auto)"
+                width={12}
+              />
+            </InlineField>
+            <InlineField
+              label="Compare to"
+              labelWidth={14}
+              tooltip="Compare current time range to the same window N seconds ago. Honeycomb returns the comparison series alongside the main result."
+            >
+              <Select
+                options={COMPARE_TIME_OFFSET_OPTIONS}
+                value={q.compareTimeOffset ?? 0}
+                onChange={(v) => update({ compareTimeOffset: v.value ?? 0 })}
+                width={20}
+              />
+            </InlineField>
+          </InlineFieldRow>
+        </CollapsableSection>
+      </div>
 
-      {/* Run button */}
       <div className={styles.runRow}>
-        <ToolbarButton
-          variant="primary"
-          onClick={handleRunQuery}
-          icon="play"
-        >
+        <ToolbarButton variant="primary" onClick={handleRunQuery} icon="play">
           Run query
         </ToolbarButton>
       </div>
@@ -280,17 +394,68 @@ export function QueryEditor({ datasource, query, onChange, onRunQuery }: Props) 
   );
 }
 
-function getStyles(theme: ReturnType<typeof useTheme2>) {
+const LABEL_WIDTH = 18;
+
+function compareLabel(offset: number | undefined): string {
+  if (!offset) {
+    return 'None';
+  }
+  const opt = COMPARE_TIME_OFFSET_OPTIONS.find((o) => o.value === offset);
+  return opt?.label ?? `${offset}s`;
+}
+
+interface SectionProps {
+  label: string;
+  styles: ReturnType<typeof getStyles>;
+  children: React.ReactNode;
+}
+
+function Section({ label, styles, children }: SectionProps) {
+  return (
+    <div className={styles.section}>
+      <div className={styles.sectionHeader}>{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function getStyles(theme: GrafanaTheme2) {
   return {
     wrapper: css`
       display: flex;
       flex-direction: column;
-      gap: ${theme.spacing(1)};
+      gap: ${theme.spacing(0.5)};
+    `,
+    section: css`
+      display: flex;
+      flex-direction: column;
+      gap: ${theme.spacing(0.25)};
+      margin-top: ${theme.spacing(0.5)};
+    `,
+    sectionHeader: css`
+      font-size: ${theme.typography.bodySmall.fontSize};
+      font-weight: ${theme.typography.fontWeightMedium};
+      color: ${theme.colors.text.secondary};
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    `,
+    optionsWrapper: css`
+      margin-top: ${theme.spacing(0.5)};
+      border-top: 1px solid ${theme.colors.border.weak};
+      padding-top: ${theme.spacing(0.5)};
+    `,
+    optionsLabel: css`
+      font-size: ${theme.typography.body.fontSize};
+    `,
+    optionsSummary: css`
+      color: ${theme.colors.text.secondary};
+      font-weight: ${theme.typography.fontWeightRegular};
+      margin-left: ${theme.spacing(1)};
     `,
     runRow: css`
       display: flex;
       justify-content: flex-end;
-      margin-top: ${theme.spacing(1)};
+      margin-top: ${theme.spacing(0.5)};
     `,
   };
 }

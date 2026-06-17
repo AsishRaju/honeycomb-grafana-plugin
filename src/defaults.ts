@@ -13,6 +13,7 @@ export function defaultQuery(): Partial<HoneycombQuery> {
     filterCombination: 'AND',
     breakdowns: [],
     orders: [],
+    havings: [],
     limit: 100,
     granularity: 0,
     compareTimeOffset: 0,

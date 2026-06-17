@@ -66,7 +66,7 @@ export function CalculationsEditor({ calculations, columnOptions, loadingColumns
               </InlineField>
             )}
 
-            <InlineField label={idx === 0 ? 'Alias' : ''} labelWidth={6} tooltip="Optional display name for this metric">
+            <InlineField label={idx === 0 ? 'Alias' : ''} labelWidth={8} tooltip="Optional display name for this metric">
               <Input
                 placeholder="optional alias"
                 value={calc.alias || ''}

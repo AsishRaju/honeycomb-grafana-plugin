@@ -34,10 +34,18 @@ type Query struct {
 }
 
 // Calculation describes a single aggregation operation.
+//
+// Filters and FilterCombination are per-calculation filters that scope this
+// calc's input rows. Honeycomb requires the Metrics Beta feature flag for
+// this to work; queries will be rejected with a 4xx otherwise.
+//
+// See https://docs.honeycomb.io/api/queries/create-a-query.md
 type Calculation struct {
-	Op      string `json:"op"`
-	Column  string `json:"column,omitempty"`
-	Alias   string `json:"alias,omitempty"` // appears as the column name in results
+	Op                string   `json:"op"`
+	Column            string   `json:"column,omitempty"`
+	Alias             string   `json:"alias,omitempty"` // appears as the column name in results
+	Filters           []Filter `json:"filters,omitempty"`
+	FilterCombination string   `json:"filter_combination,omitempty"`
 }
 
 // Filter restricts the events included in the query.
@@ -171,12 +179,85 @@ func (ft *FlexibleTime) UnmarshalJSON(b []byte) error {
 
 // ResultEntry is one row in the summary results response.
 // Keys are the same as SeriesEntry.Data.
+//
+// Honeycomb's wire format wraps each row under a "data" key
+// (e.g. `{"data": {"COUNT": 42, "trace.trace_id": "..."}}`); we keep
+// ResultEntry flat in memory and unwrap during decode so transformers
+// stay simple. Flat-shaped JSON also decodes cleanly so existing tests
+// and any caller that builds entries directly continue to work.
 type ResultEntry map[string]interface{}
+
+// UnmarshalJSON unwraps the Honeycomb {"data": {...}} envelope when
+// present. Falls back to flat decode otherwise.
+func (r *ResultEntry) UnmarshalJSON(b []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(b, &fields); err != nil {
+		return err
+	}
+	if dataRaw, ok := fields["data"]; ok {
+		var data map[string]interface{}
+		if err := json.Unmarshal(dataRaw, &data); err != nil {
+			return fmt.Errorf("ResultEntry: decode data field: %w", err)
+		}
+		*r = ResultEntry(data)
+		return nil
+	}
+	var flat map[string]interface{}
+	if err := json.Unmarshal(b, &flat); err != nil {
+		return err
+	}
+	*r = ResultEntry(flat)
+	return nil
+}
 
 // Links carries UI URLs returned by Honeycomb.
 type Links struct {
 	QueryURL      string `json:"query_url"`
 	GraphImageURL string `json:"graph_image_url"`
+}
+
+// ---------------------------------------------------------------------------
+// SLOs API
+// ---------------------------------------------------------------------------
+
+// SLO is the Honeycomb Service Level Objective shape returned by
+// GET /1/slos/{datasetSlug} and GET /1/slos/{datasetSlug}/{sloId}.
+//
+// The "detailed" fields (Compliance, BudgetRemaining, Status, BurnRate) are
+// only populated when GetSLO is called with detailed=true. ListSLOs always
+// omits them per the Honeycomb spec.
+//
+// See https://docs.honeycomb.io/api/slos/get-an-slo.md
+type SLO struct {
+	ID               string     `json:"id"`
+	Name             string     `json:"name"`
+	Description      string     `json:"description,omitempty"`
+	SLI              SLI        `json:"sli"`
+	TimePeriodDays   int        `json:"time_period_days"`
+	TargetPerMillion int        `json:"target_per_million"`
+	Tags             []SLOTag   `json:"tags,omitempty"`
+	ResetAt          *time.Time `json:"reset_at,omitempty"`
+	CreatedAt        time.Time  `json:"created_at,omitempty"`
+	UpdatedAt        time.Time  `json:"updated_at,omitempty"`
+	DatasetSlugs     []string   `json:"dataset_slugs,omitempty"`
+
+	// Detailed-only fields (present when ?detailed=true on GetSLO).
+	Compliance      *float64 `json:"compliance,omitempty"`
+	BudgetRemaining *float64 `json:"budget_remaining,omitempty"`
+	Status          string   `json:"status,omitempty"`
+	BurnRate        *float64 `json:"burn_rate,omitempty"`
+}
+
+// SLI is the Service Level Indicator that drives an SLO; it references a
+// derived (calculated) field by alias.
+type SLI struct {
+	Alias string `json:"alias"`
+}
+
+// SLOTag is one of the up-to-10 key/value tags on an SLO.
+type SLOTag struct {
+	Key   string `json:"key"`
+	Value string `json:"value,omitempty"`
 }
 
 // ---------------------------------------------------------------------------

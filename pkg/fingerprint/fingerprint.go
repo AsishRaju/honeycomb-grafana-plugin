@@ -96,15 +96,17 @@ func CompletedResultKey(execKey string) string {
 // ApplyTimeRange sets the time range fields on a Query for the given
 // Grafana from/to window. It uses start_time + end_time for absolute
 // ranges (the common Grafana case) and derives a granularity if the
-// caller passes granularity=0 (auto).
-func ApplyTimeRange(q *honeycomb.Query, from, to time.Time, granularity int) {
+// caller passes granularity=0 (auto). When maxDataPoints > 0 the auto
+// granularity is sized to roughly match Grafana's panel width so the
+// chart isn't undersampled vs. the same query in Honeycomb's UI.
+func ApplyTimeRange(q *honeycomb.Query, from, to time.Time, granularity int, maxDataPoints int64) {
 	q.StartTime = from.Unix()
 	q.EndTime = to.Unix()
 	q.TimeRange = 0 // use absolute time, not relative
 
 	if granularity == 0 {
 		duration := to.Sub(from)
-		q.Granularity = deriveGranularity(duration)
+		q.Granularity = deriveGranularity(duration, maxDataPoints)
 	} else {
 		q.Granularity = granularity
 	}
@@ -193,27 +195,55 @@ func snapTime(unix, snapSecs int64) int64 {
 
 // deriveGranularity returns a reasonable granularity (in seconds) for a
 // given query duration when the user has not specified one explicitly.
-// The returned value is always within Honeycomb's valid range of [T/1000, T/1].
-func deriveGranularity(duration time.Duration) int {
+// The returned value is always within Honeycomb's valid range of [T/1000, T/1]
+// and snaps up to a "nice" interval to improve cache hit rate across
+// adjacent viewport widths.
+func deriveGranularity(duration time.Duration, maxDataPoints int64) int {
 	secs := int(duration.Seconds())
 	if secs <= 0 {
 		return 60
 	}
-	// Aim for ~100 data points.
-	g := secs / 100
-	// Round to a "nice" interval.
-	switch {
-	case g <= 60:
-		return 60
-	case g <= 300:
-		return 300
-	case g <= 900:
-		return 900
-	case g <= 3600:
-		return 3600
-	default:
-		return g
+
+	// Default target if Grafana didn't supply MaxDataPoints. 1000 matches
+	// Honeycomb's own minimum-bucket-size limit (T/1000) and produces charts
+	// at the same fidelity as queries run in Honeycomb's UI.
+	target := int64(1000)
+	if maxDataPoints > 0 {
+		target = maxDataPoints
 	}
+
+	g := secs / int(target)
+	if g < 1 {
+		g = 1
+	}
+
+	// Honeycomb requires granularity in [T/1000, T]. Cap to T/1000 (rounded up)
+	// so we don't produce values Honeycomb will reject.
+	minG := (secs + 999) / 1000
+	if minG < 1 {
+		minG = 1
+	}
+	if g < minG {
+		g = minG
+	}
+	if g > secs {
+		g = secs
+	}
+
+	return roundUpNiceGranularity(g)
+}
+
+// roundUpNiceGranularity rounds a granularity (seconds) up to the nearest
+// "nice" value. Snapping to a fixed ladder means small viewport-width
+// differences don't fragment the cache.
+func roundUpNiceGranularity(g int) int {
+	nice := []int{1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400, 28800, 86400}
+	for _, n := range nice {
+		if g <= n {
+			return n
+		}
+	}
+	return g
 }
 
 // ---------------------------------------------------------------------------

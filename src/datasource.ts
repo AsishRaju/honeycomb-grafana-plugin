@@ -43,10 +43,28 @@ export class HoneycombDataSource extends DataSourceWithBackend<HoneycombQuery, H
     if (!query.dataset?.trim()) {
       return false;
     }
-    if (!query.rawMode && (!query.calculations || query.calculations.length === 0)) {
-      return false;
+    if (query.queryType === 'slo') {
+      // SLO single mode needs an SLO ID; list mode just needs the dataset.
+      if (query.sloResultType === 'single' && !query.sloId?.trim()) {
+        return false;
+      }
+      return true;
     }
-    if (query.rawMode && !query.rawJson?.trim()) {
+    if (query.queryType === 'logs') {
+      // Logs needs only a dataset (filters/limits all optional).
+      return true;
+    }
+    if (query.queryType === 'traces') {
+      // Single-trace mode needs a trace ID; search just needs the dataset.
+      if ((query.tracesResultType ?? 'single') === 'single' && !query.traceId?.trim()) {
+        return false;
+      }
+      return true;
+    }
+    if (query.queryType === 'raw' || query.rawMode) {
+      return Boolean(query.rawJson?.trim());
+    }
+    if (!query.calculations || query.calculations.length === 0) {
       return false;
     }
     return true;
@@ -68,6 +86,12 @@ export class HoneycombDataSource extends DataSourceWithBackend<HoneycombQuery, H
         column: replace(f.column),
         value: typeof f.value === 'string' ? replace(f.value) : f.value,
       })),
+      havings: (query.havings ?? []).map((h) => ({
+        ...h,
+        column: h.column ? replace(h.column) : h.column,
+        value: typeof h.value === 'string' ? replace(h.value) : h.value,
+      })),
+      traceId: query.traceId ? replace(query.traceId) : query.traceId,
       rawJson: query.rawJson ? replace(query.rawJson) : query.rawJson,
     };
   }

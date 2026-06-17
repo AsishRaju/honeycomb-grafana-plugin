@@ -129,7 +129,7 @@ func TestApplyTimeRange_AutoGranularity(t *testing.T) {
 	from := time.Unix(1700000000, 0)
 	to := from.Add(2 * time.Hour)
 
-	fingerprint.ApplyTimeRange(&q, from, to, 0)
+	fingerprint.ApplyTimeRange(&q, from, to, 0, 0)
 
 	if q.StartTime != from.Unix() {
 		t.Errorf("expected StartTime %d, got %d", from.Unix(), q.StartTime)
@@ -150,9 +150,40 @@ func TestApplyTimeRange_ExplicitGranularity(t *testing.T) {
 	from := time.Unix(1700000000, 0)
 	to := from.Add(1 * time.Hour)
 
-	fingerprint.ApplyTimeRange(&q, from, to, 300)
+	fingerprint.ApplyTimeRange(&q, from, to, 300, 0)
 
 	if q.Granularity != 300 {
 		t.Errorf("expected granularity 300, got %d", q.Granularity)
+	}
+}
+
+// Auto-granularity should follow Grafana's MaxDataPoints (panel width) so
+// charts are not undersampled relative to the same query in Honeycomb's UI.
+// 1h / 2000 datapoints ≈ 1.8s, which Honeycomb floors at T/1000 = 3.6s and
+// the nice-ladder snaps up to 5s.
+func TestApplyTimeRange_AutoGranularity_UsesMaxDataPoints(t *testing.T) {
+	q := honeycomb.Query{}
+	from := time.Unix(1700000000, 0)
+	to := from.Add(1 * time.Hour)
+
+	fingerprint.ApplyTimeRange(&q, from, to, 0, 2000)
+
+	if q.Granularity != 5 {
+		t.Errorf("expected granularity 5 for 1h with MDP=2000, got %d", q.Granularity)
+	}
+}
+
+// Without MaxDataPoints the default target is 1000 buckets. For a 1h range
+// that lands at the Honeycomb minimum granularity (T/1000 = 3.6s), snapped
+// up to 5s on the nice ladder.
+func TestApplyTimeRange_AutoGranularity_DefaultTarget(t *testing.T) {
+	q := honeycomb.Query{}
+	from := time.Unix(1700000000, 0)
+	to := from.Add(1 * time.Hour)
+
+	fingerprint.ApplyTimeRange(&q, from, to, 0, 0)
+
+	if q.Granularity != 5 {
+		t.Errorf("expected granularity 5 for 1h with MDP=0, got %d", q.Granularity)
 	}
 }

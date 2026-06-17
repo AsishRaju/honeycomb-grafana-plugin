@@ -172,6 +172,37 @@ func (c *Client) ListColumns(ctx context.Context, dataset string) ([]ColumnMeta,
 	return cols, nil
 }
 
+// ListSLOs returns the SLOs for a given dataset (or "__all__" for environment-wide).
+//
+// Spec: https://docs.honeycomb.io/api/slos/get-all-slos.md
+//
+// Note: detailed metrics (compliance, burn_rate, etc.) are NOT returned by this
+// endpoint. Call GetSLO with detailed=true for a single SLO's metrics.
+func (c *Client) ListSLOs(ctx context.Context, dataset string) ([]SLO, error) {
+	path := fmt.Sprintf("/1/slos/%s", url.PathEscape(dataset))
+	var slos []SLO
+	if err := c.doWithRetry(ctx, http.MethodGet, path, nil, &slos); err != nil {
+		return nil, fmt.Errorf("list SLOs for dataset %q: %w", dataset, err)
+	}
+	return slos, nil
+}
+
+// GetSLO fetches a single SLO. When detailed=true, the response includes
+// compliance, budget_remaining, status, and burn_rate (last-4-hours).
+//
+// Spec: https://docs.honeycomb.io/api/slos/get-an-slo.md
+func (c *Client) GetSLO(ctx context.Context, dataset, sloID string, detailed bool) (*SLO, error) {
+	path := fmt.Sprintf("/1/slos/%s/%s", url.PathEscape(dataset), url.PathEscape(sloID))
+	if detailed {
+		path += "?detailed=true"
+	}
+	var slo SLO
+	if err := c.doWithRetry(ctx, http.MethodGet, path, nil, &slo); err != nil {
+		return nil, fmt.Errorf("get SLO %q (dataset=%q): %w", sloID, dataset, err)
+	}
+	return &slo, nil
+}
+
 // DatasetMeta is metadata about a Honeycomb dataset.
 type DatasetMeta struct {
 	Name        string    `json:"name"`
