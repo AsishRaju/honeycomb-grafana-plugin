@@ -1,10 +1,9 @@
-// Package ratelimit provides a token-bucket rate limiter protecting the
-// Honeycomb Create Query Result endpoint (hard cap: 10 requests/minute).
+// Package ratelimit provides a token-bucket rate limiter for the
+// Honeycomb Create Query Result endpoint.
 //
-// See ADR-003 for the full rationale. Key decisions:
-//   - Rate: 8/60 tokens per second (20% headroom below Honeycomb's hard cap)
-//   - Burst: 3 (allows a short initial burst before queuing)
-//   - Max wait: 30 s before returning an error to Grafana
+// See ADR-003 for the original rationale. This Etsy fork raises the local
+// client budget above Honeycomb's published 10/min hard cap (60/min, burst 30)
+// so dense Grafana dashboards can submit more aggressively.
 //
 // The limiter is per-datasource-instance (one per API key), created in
 // NewDatasource and held in the Datasource struct.
@@ -19,10 +18,10 @@ import (
 )
 
 const (
-	// tokensPerMinute is our conservative limit (20% below Honeycomb's 10/min cap).
-	tokensPerMinute = 8
+	// tokensPerMinute is the local Create Query Result budget.
+	tokensPerMinute = 60
 	// burstSize allows a short burst of back-to-back submissions at startup.
-	burstSize = 3
+	burstSize = 30
 	// maxWait is the longest we will block waiting for a token.
 	maxWait = 30 * time.Second
 )
@@ -34,7 +33,7 @@ type Limiter struct {
 
 // New returns a Limiter configured for the Create Query Result endpoint.
 func New() *Limiter {
-	r := rate.Every(time.Minute / tokensPerMinute) // one token every 7.5 s
+	r := rate.Every(time.Minute / tokensPerMinute) // one token every 1 s
 	return &Limiter{rl: rate.NewLimiter(r, burstSize)}
 }
 

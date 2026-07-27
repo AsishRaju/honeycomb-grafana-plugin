@@ -8,12 +8,17 @@ import (
 	"github.com/honeycombio/grafana-honeycomb-datasource/pkg/ratelimit"
 )
 
+func drainBurst(lim *ratelimit.Limiter) {
+	for lim.Reserve() {
+	}
+}
+
 func TestLimiter_AllowsBurstImmediately(t *testing.T) {
 	lim := ratelimit.New()
 
-	// The burst is 3, so the first 3 calls should succeed without waiting.
+	// A fresh limiter should allow an immediate burst without waiting.
 	start := time.Now()
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 30; i++ {
 		if err := lim.Wait(context.Background()); err != nil {
 			t.Fatalf("call %d: unexpected error: %v", i, err)
 		}
@@ -28,10 +33,7 @@ func TestLimiter_AllowsBurstImmediately(t *testing.T) {
 func TestLimiter_RespectsContextCancellation(t *testing.T) {
 	lim := ratelimit.New()
 
-	// Drain the burst.
-	for i := 0; i < 3; i++ {
-		lim.Reserve()
-	}
+	drainBurst(lim)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
@@ -64,14 +66,10 @@ func TestLimiter_Reserve_NonBlocking(t *testing.T) {
 func TestLimiter_MaxWaitTimeout(t *testing.T) {
 	lim := ratelimit.New()
 
-	// Drain burst.
-	for i := 0; i < 3; i++ {
-		lim.Reserve()
-	}
+	drainBurst(lim)
 
-	// With 8 tokens/min rate and 0 tokens available, Wait should timeout
-	// rather than blocking indefinitely. We use a very short context to
-	// avoid making the test slow.
+	// With the burst drained, Wait should timeout rather than blocking
+	// indefinitely. We use a very short context to avoid a slow test.
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
