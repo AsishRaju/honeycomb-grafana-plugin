@@ -7,6 +7,19 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.1.4-etsy] — 2026-07-27
+
+Etsy fork build bundling the local production fixes on top of upstream `0.1.2`.
+
+### Fixed
+- Normalize visual-editor `in` / `not-in` filter values from CSV strings into JSON arrays before calling Honeycomb (Metrics, Logs, Trace Search), avoiding 422s from scalar payloads.
+
+### Added
+- **Open in Honeycomb** button in the query editor, using the backend `honeycombQueryURL` frame meta after a successful run.
+
+### Changed
+- Raise the local Create Query Result token bucket to **60 req/min** with burst **30** for denser Grafana dashboards (above Honeycomb's published ~10/min hard cap; 429 handling still applies).
+
 ## [0.1.0] — 2025-01-15
 
 ### Added
