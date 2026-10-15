@@ -18,7 +18,7 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
     "@grafana/eslint-config": "^9.0.0",
-    "@grafana/plugin-e2e": "^3.10.0",
+    "@grafana/plugin-e2e": "^3.15.1",
     "@grafana/tsconfig": "^2.0.1",
     "@playwright/test": "^1.62.0",
     "@swc/core": "^1.7.26",
@@ -58,10 +58,10 @@
   },
   "dependencies": {
     "@emotion/css": "^11.13.0",
-    "@grafana/data": "^13.0.1",
-    "@grafana/runtime": "^13.0.1",
-    "@grafana/schema": "^13.0.1",
-    "@grafana/ui": "^13.0.1",
+    "@grafana/data": "~13.0.11",
+    "@grafana/runtime": "~13.0.11",
+    "@grafana/schema": "~13.0.11",
+    "@grafana/ui": "~13.0.11",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tslib": "^2.6.3"
