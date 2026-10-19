@@ -7,6 +7,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.1.6] — 2026-10-19
+
 ### Added
 - Configurable rate limit for the Create Query Result endpoint. Set **Rate Limit (queries/minute)** under **Advanced** in the data source settings, or `rateLimitPerMinute` in provisioning `jsonData`. Defaults to 8 as before. The burst is capped at the configured rate so that a low setting still holds during a cold start.
 
@@ -78,7 +80,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Example provisioning configuration and example dashboard.
 - Apache 2.0 license.
 
-[Unreleased]: https://github.com/honeycombio/honeycomb-grafana-plugin/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/honeycombio/honeycomb-grafana-plugin/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/honeycombio/honeycomb-grafana-plugin/releases/tag/v0.1.6
 [0.1.4]: https://github.com/honeycombio/honeycomb-grafana-plugin/releases/tag/v0.1.4
 [0.1.3]: https://github.com/honeycombio/honeycomb-grafana-plugin/releases/tag/v0.1.3
 [0.1.0]: https://github.com/honeycombio/honeycomb-grafana-plugin/releases/tag/v0.1.0
