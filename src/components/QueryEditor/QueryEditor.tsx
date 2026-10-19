@@ -44,9 +44,15 @@ type Props = QueryEditorProps<HoneycombDataSource, HoneycombQuery, HoneycombData
  * extractHoneycombQueryURL reads the Honeycomb result URL that the backend
  * attaches as frame meta (custom.honeycombQueryURL) after a successful query.
  * See ADR-004.
+ *
+ * data.series holds frames for every query in the panel, so only frames whose
+ * refId matches this editor's query are considered.
  */
-function extractHoneycombQueryURL(data?: PanelData): string | undefined {
+export function extractHoneycombQueryURL(data: PanelData | undefined, refId: string): string | undefined {
   for (const frame of data?.series ?? []) {
+    if (frame.refId !== refId) {
+      continue;
+    }
     const custom = frame.meta?.custom as Record<string, unknown> | undefined;
     const url = custom?.honeycombQueryURL;
     if (typeof url === 'string' && url.trim() !== '') {
@@ -74,7 +80,10 @@ export function QueryEditor({ datasource, query, onChange, onRunQuery, data }: P
     [query]
   );
 
-  const honeycombQueryURL = useMemo(() => extractHoneycombQueryURL(data), [data]);
+  const honeycombQueryURL = useMemo(
+    () => extractHoneycombQueryURL(data, query.refId),
+    [data, query.refId]
+  );
 
   const allDatasetsOption: SelectableValue<string> = { label: 'All Datasets', value: ALL_DATASETS_SLUG, description: 'Query across all datasets in the environment' };
 
